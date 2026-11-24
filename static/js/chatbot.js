@@ -39,7 +39,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // ── MAIN FUNCTION ──────────────────────
     async function sendMessage(text) {
-        if (!text) return;
+        if (!text || chatSendBtn.disabled) return;
 
         if (controller) controller.abort();
         controller = new AbortController();
@@ -61,7 +61,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 signal: controller.signal
             });
 
-            if (!res.ok) throw new Error("Server error");
+            if (!res.ok) {
+                const error = await res.json().catch(() => ({}));
+                throw new Error(error.message || `AI assistant unavailable (HTTP ${res.status}). Please retry.`);
+            }
+            if (!res.headers.get("content-type")?.includes("text/event-stream")) throw new Error("Unexpected response from assistant.");
             if (!res.body) throw new Error("No stream");
 
             removeTyping(typing);
@@ -71,6 +75,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             const bubble = addBubble("ai", "");
             let buffer = "";
+            let completed = false;
 
             while (true) {
                 const { done, value } = await reader.read();
@@ -83,9 +88,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 for (let i = 0; i < events.length - 1; i++) {
                     const event = events[i];
 
-                    if (event.includes("event:done")) continue;
-                    if (event.includes("event:error")) {
-                        bubble.textContent = "⚠️ Error generating response";
+                    if (event.startsWith("event:done\n")) { completed = true; continue; }
+                    if (event.startsWith("event:error\n")) {
+                        bubble.textContent = event.split("\ndata:")[1] || "AI response interrupted. Please retry.";
+                        completed = true;
                         continue;
                     }
 
@@ -93,7 +99,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (!match) continue;
 
                     let token = match[1];
-                    if (!token || token.trim() === "") continue;
+                    if (!token) continue;
 
                     token = sanitizeToken(token);
 
@@ -111,18 +117,19 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
             // FINAL CLEAN
-            bubble.textContent = cleanFinalOutput(bubble.textContent);
+            bubble.textContent = cleanFinalOutput(bubble.textContent) + (completed ? "" : " [Response interrupted. Please retry.]");
 
         } catch (err) {
             if (err.name === "AbortError") return;
 
             console.error(err);
             removeTyping(typing);
-            addBubble("ai", "⚠️ Failed to get response. Try again.");
+            addBubble("ai", err.message || "Failed to get response. Try again.");
+        } finally {
+            removeTyping(typing);
+            chatSendBtn.disabled = false;
+            chatInput.focus();
         }
-
-        chatSendBtn.disabled = false;
-        chatInput.focus();
     }
 
     // ── TOKEN CLEANING ─────────────────────

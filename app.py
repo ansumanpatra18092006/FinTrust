@@ -7,7 +7,7 @@ import os
 # Environment
 # ─────────────────────────────────────────────────────────────
 
-load_dotenv(find_dotenv(), override=True)
+load_dotenv(find_dotenv(), override=False)
 
 # ─────────────────────────────────────────────────────────────
 # Database
@@ -46,7 +46,11 @@ app = Flask(__name__)
 install_runtime_guard(app)
 
 # Secret key
-app.secret_key = os.getenv("SECRET_KEY", "dev-secret-change-me")
+app.secret_key = os.getenv("SECRET_KEY")
+if not app.secret_key or len(app.secret_key) < 32 or app.secret_key in {"dev-secret-change-me", "replace-with-a-long-random-secret"}:
+    if os.getenv("FINTRUST_ENV", "production") != "development":
+        raise RuntimeError("A strong SECRET_KEY is required")
+    app.secret_key = os.urandom(32)
 
 # ─────────────────────────────────────────────────────────────
 # CORS
@@ -54,7 +58,7 @@ app.secret_key = os.getenv("SECRET_KEY", "dev-secret-change-me")
 CORS(
     app,
     supports_credentials=True,
-    resources={r"/*": {"origins": os.getenv("CORS_ORIGINS", "http://127.0.0.1:5000,http://localhost:5000").split(",")}},
+    resources={r"/*": {"origins": [origin.strip() for origin in os.getenv("CORS_ORIGINS", "").split(",") if origin.strip() and origin.strip() != "*"]}},
 )
 
 # ─────────────────────────────────────────────────────────────
@@ -64,7 +68,7 @@ CORS(
 # SameSite=Lax works for the normal web flow.
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE="None",
+    SESSION_COOKIE_SAMESITE=os.getenv("SESSION_COOKIE_SAMESITE", "Lax"),
     SESSION_COOKIE_SECURE=os.getenv("SESSION_COOKIE_SECURE", "true").lower() == "true",
 )
 
@@ -76,7 +80,7 @@ try:
     run_migrations()
     print("✅ Database initialized")
 except Exception as e:
-    print(f"⚠️ DB init skipped: {e}")
+    app.logger.warning("Database initialization skipped: %s", type(e).__name__)
 
 # ─────────────────────────────────────────────────────────────
 # Register blueprints

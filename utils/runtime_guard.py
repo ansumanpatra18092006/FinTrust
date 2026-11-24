@@ -91,8 +91,8 @@ def install_runtime_guard(app):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(self)"
         response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https:; "
-            "script-src 'self' 'unsafe-inline' https:; connect-src 'self' https:; frame-ancestors 'none'"
+            "default-src 'self'; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; connect-src 'self' https:; frame-ancestors 'none'"
         )
         if os.getenv("FORCE_HSTS", "0") == "1":
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"

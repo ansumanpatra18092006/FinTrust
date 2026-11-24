@@ -106,7 +106,7 @@ async function checkLedgerIntegrity() {
 
         if (badge) {
             if (data.valid) {
-                badge.innerHTML  = `<i class="fa-solid fa-shield-check"></i> Ledger OK (${data.total})`;
+                badge.innerHTML  = `<i class="fa-solid fa-circle-check"></i> Ledger OK (${data.total})`;
                 badge.style.background = 'rgba(16,185,129,0.18)';
                 badge.style.color      = '#10b981';
             } else {

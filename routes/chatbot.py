@@ -22,13 +22,13 @@ import json
 import re
 import time
 import random
-import traceback
+import logging
 
 import requests
-from flask import Blueprint, Response, request, session, stream_with_context
+from flask import Blueprint, Response, request, session, stream_with_context, jsonify, g
 
 from routes.ai_insights import _fetch_full_metrics
-from services.gemini_service import stream_chat as gemini_stream_chat, GEMINI_MODEL
+from services.gemini_service import stream_chat as gemini_stream_chat, GEMINI_MODEL, ProviderError
 from utils.db import get_db
 from utils.decorators import login_required
 
@@ -511,48 +511,33 @@ def _stream_text(text: str, model_used: str = "instant"):
     yield _sse("done", json.dumps({"model_used": model_used}))
 
 
-def _stream_gemini(messages: list[dict], model: str, user_id: int, user_message: str):
-    """
-    Open a Gemini streaming request and yield tokens as SSE events.
-    Accumulates the full reply, cleans it, then saves to memory.
-    """
+def _chat_error(code, status):
+    messages = {"provider_configuration": "AI assistant is not configured. Contact support.",
+                "provider_timeout": "AI assistant timed out. Please retry.",
+                "provider_unavailable": "AI assistant is temporarily unavailable. Please retry.",
+                "provider_response": "AI assistant returned an invalid response. Please retry.",
+                "database_unavailable": "Financial data is temporarily unavailable. Please retry.",
+                "invalid_message": "Enter a message of 1 to 4000 characters."}
+    return jsonify(status="error", error=code, message=messages.get(code, "Unable to complete request."), request_id=getattr(g, "request_id", None)), status
+
+
+def _stream_gemini(tokens, model, user_id, user_message):
     full_reply = ""
     try:
-        for token in gemini_stream_chat(messages, model=model):
-            token = token.replace("$", "₹")
-            token = re.sub(r"\*+", "", token)
-            token = re.sub(r"#+\s*", "", token)
+        for token in tokens:
+            token = re.sub(r"\*+|#+\s*", "", token.replace("$", "₹"))
             full_reply += token
             yield _sse("token", token)
-
-        cleaned = _clean(full_reply)
-        cleaned = _trim_sentences(cleaned, max_count=3)
-
+        cleaned = _trim_sentences(_clean(full_reply), max_count=3)
         history = conversation_memory.get(user_id, [])
-        history.append({"role": "user",      "content": user_message})
-        history.append({"role": "assistant", "content": cleaned})
+        history.extend([{"role": "user", "content": user_message}, {"role": "assistant", "content": cleaned}])
         conversation_memory[user_id] = history[-12:]
-
-    except RuntimeError:
-        yield _sse("error", "Gemini API key is not configured. Set GEMINI_API_KEY in .env.")
-        model = "offline"
-    except requests.exceptions.ConnectionError:
-        yield _sse("error", "Couldn't reach Gemini — check your connection and try again.")
-        model = "offline"
-    except requests.exceptions.Timeout:
-        yield _sse("error", "The response timed out — please try again.")
-        model = "timeout"
-    except requests.exceptions.HTTPError as exc:
-        traceback.print_exc()
-        status = exc.response.status_code if exc.response is not None else "unknown"
-        yield _sse("error", f"Gemini request failed ({status}) — please try again.")
-        model = "error"
-    except Exception:
-        traceback.print_exc()
-        yield _sse("error", "Something went wrong — please try again in a moment.")
-        model = "error"
-
-    yield _sse("done", json.dumps({"model_used": model}))
+        yield _sse("done", json.dumps({"model_used": model}))
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Chat stream interrupted: %s", type(exc).__name__)
+        yield _sse("error", "AI response interrupted. Please retry.")
+    finally:
+        tokens.close()
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -563,26 +548,24 @@ def _stream_gemini(messages: list[dict], model: str, user_id: int, user_message:
 @login_required
 def chat():
     user_id = session["user_id"]
-    data    = request.get_json(silent=True) or {}
-    message = (data.get("message") or "").strip()
-
-    if not message:
-        def _empty():
-            yield _sse("token", "Please type a message.")
-            yield _sse("done", json.dumps({"model_used": "none"}))
-        return Response(stream_with_context(_empty()),
-                        mimetype="text/event-stream",
-                        headers={"X-Accel-Buffering": "no",
-                                 "Cache-Control": "no-cache",
-                                 "Content-Type": "text/event-stream; charset=utf-8"})
-
-    conn = get_db()
-    try:
-        metrics = _fetch_full_metrics(conn, user_id)
-    finally:
-        conn.close()
-
+    data = request.get_json(silent=True)
+    message = data.get("message") if isinstance(data, dict) else None
+    if not isinstance(message, str) or not message.strip() or len(message) > 4000:
+        return _chat_error("invalid_message", 400)
+    message = message.strip()
     intent = _detect_intent(message)
+    if intent in {"greeting", "small_talk"}:
+        return Response(stream_with_context(_stream_text(_fast_path(intent, {}))), mimetype="text/event-stream", headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"})
+    try:
+        conn = get_db()
+        try:
+            metrics = _fetch_full_metrics(conn, user_id)
+        finally:
+            conn.close()
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Chat metrics failed: %s", type(exc).__name__)
+        return _chat_error("database_unavailable", 503)
+
     a      = _analyse(metrics, message, intent)
 
     fast_reply = _fast_path(intent, a)
@@ -604,8 +587,28 @@ def chat():
     ]
     model = GEMINI_MODEL
 
-    return Response(
-        stream_with_context(_stream_gemini(messages, model, user_id, message)),
+    # Prime the upstream iterator before committing HTTP 200/SSE headers.
+    tokens = gemini_stream_chat(messages, model=model)
+    try:
+        first = next(tokens)
+    except ProviderError as exc:
+        return _chat_error(exc.code, exc.status)
+    except requests.Timeout:
+        return _chat_error("provider_timeout", 504)
+    except requests.RequestException:
+        return _chat_error("provider_unavailable", 503)
+    except (StopIteration, ValueError, TypeError, AttributeError):
+        return _chat_error("provider_response", 502)
+    def primed():
+        try:
+            yield first
+            yield from tokens
+        finally:
+            tokens.close()
+    response = Response(
+        stream_with_context(_stream_gemini(primed(), model, user_id, message)),
         mimetype="text/event-stream",
         headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
     )
+    response.call_on_close(tokens.close)
+    return response

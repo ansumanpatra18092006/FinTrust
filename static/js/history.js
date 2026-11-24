@@ -67,7 +67,7 @@ function renderTransactionsList(transactions) {
                     title="${t.fraudshield_reported ? 'Reported to FraudShield' : 'Report suspicious activity'}"
                     onclick="${t.fraudshield_reported ? '' : `reportTransactionToFraudShield(${t.id})`}"
                     ${t.fraudshield_reported ? 'disabled' : ''}>
-                    <i class="fa-solid ${t.fraudshield_reported ? 'fa-shield-check' : 'fa-shield-halved'}" aria-hidden="true"></i>
+                    <i class="fa-solid ${t.fraudshield_reported ? 'fa-circle-check' : 'fa-shield-halved'}" aria-hidden="true"></i>
                 </button>` : ''}
                 <button class="btn-icon danger" title="Delete" onclick="deleteTransaction(${t.id})">
                     <i class="fa-solid fa-trash" aria-hidden="true"></i>

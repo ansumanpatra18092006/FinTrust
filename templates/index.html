@@ -12,7 +12,9 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/fontawesome/css/all.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/icon_fallback.css') }}">
+    <script defer src="{{ url_for('static', filename='js/icon_fallback.js') }}"></script>
 
     <link rel="stylesheet" href="/static/css/base.css">
     <link rel="stylesheet" href="/static/css/layout.css">
@@ -177,7 +179,7 @@
                 <!-- ROW 2: AI INSIGHTS (full-width horizontal scroll) -->
                 <div class="ai-insights-section">
                     <h2>
-                        <i class="fa-solid fa-sparkles" style="color:var(--primary)"></i>
+                        <i class="fa-solid fa-wand-magic-sparkles" style="color:var(--primary)"></i>
                         AI Financial Insights
                     </h2>
                     <div id="aiInsightsContainer"></div>
@@ -909,7 +911,7 @@
     ================================================ -->
     <div id="chatToggle" class="chat-fab" aria-label="Open AI Assistant" title="FinTrust AI">
         <div class="chat-fab-icon">
-            <i class="fa-solid fa-sparkles chat-fab-sparkle"></i>
+            <i class="fa-solid fa-wand-magic-sparkles chat-fab-sparkle"></i>
             <i class="fa-solid fa-xmark chat-fab-close"></i>
         </div>
         <div class="chat-fab-pulse"></div>
@@ -919,7 +921,7 @@
         <div class="chat-panel-header">
             <div class="chat-panel-brand">
                 <div class="chat-panel-avatar">
-                    <i class="fa-solid fa-sparkles"></i>
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
                 </div>
                 <div class="chat-panel-title-group">
                     <span class="chat-panel-title">FinTrust AI</span>

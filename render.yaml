@@ -8,6 +8,10 @@ services:
         sync: false
       - key: SECRET_KEY
         generateValue: true
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.8-flash
       - key: SESSION_COOKIE_SECURE
         value: "true"
   - type: worker

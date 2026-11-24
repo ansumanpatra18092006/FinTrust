@@ -1,17 +1,15 @@
-import os
-from dotenv import load_dotenv
-import google.generativeai as genai
+"""Opt-in live provider smoke test: python test_gemini.py."""
+def main():
+    from dotenv import load_dotenv
+    load_dotenv(override=False)
+    from services.gemini_service import stream_chat, ProviderError
+    try:
+        reply = ''.join(stream_chat([{"role": "user", "content": "Reply with Hello."}]))
+        if not reply.strip(): raise RuntimeError("Empty response")
+        print("Gemini smoke test passed")
+    except ProviderError as exc:
+        print(f"Gemini smoke test failed: {exc.code} ({exc.status})")
+        raise SystemExit(1) from None
 
-load_dotenv()
-
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-
-model = genai.GenerativeModel(
-    "models/gemini-3.6-flash"
-)
-
-response = model.generate_content(
-    "What is FinTrust?"
-)
-
-print(response.text)
+if __name__ == "__main__":
+    main()

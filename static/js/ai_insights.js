@@ -56,14 +56,14 @@ function _renderRiskIndicator(data) {
     const el = document.getElementById("riskIndicator");
     if (!el) return;
     const icons = {
-        low: "fa-shield-check",
+        low: "fa-shield-heart",
         medium: "fa-shield-halved",
-        high: "fa-shield-exclamation",
-        healthy: "fa-shield-check",
-        good: "fa-shield-check",
+        high: "fa-triangle-exclamation",
+        healthy: "fa-shield-heart",
+        good: "fa-shield-heart",
         moderate: "fa-shield-halved",
-        elevated_risk: "fa-shield-exclamation",
-        high_risk: "fa-shield-exclamation",
+        elevated_risk: "fa-triangle-exclamation",
+        high_risk: "fa-triangle-exclamation",
         insufficient_data: "fa-circle-question",
     };
     const lv = data.risk_level || "insufficient_data";
@@ -109,7 +109,7 @@ function _renderNudge(nudge) {
     const card = document.createElement("div");
     card.id = "smartNudgeCard"; card.className = "smart-nudge-card";
     card.innerHTML = `
-        <div class="nudge-icon"><i class="fa-solid fa-bell-ring"></i></div>
+        <div class="nudge-icon"><i class="fa-solid fa-bell"></i></div>
         <div class="nudge-content"><strong>Month-End Alert</strong>
             <p>${escapeHtml(nudge.message)}</p></div>
         <button class="nudge-dismiss" onclick="document.getElementById('smartNudgeCard').remove()" title="Dismiss">
